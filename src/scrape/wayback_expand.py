@@ -1,0 +1,195 @@
+"""Historical-article URL discovery via the Wayback Machine CDX API.
+
+Use this when an outlet's live sitemap doesn't index historical content
+(Fox News specifically — its sitemap covers only recent articles).
+
+The CDX API returns every Wayback snapshot for a URL pattern, filtered by date.
+We use it to discover article URLs that existed in a given year, then deduplicate
+to original URLs and scrape them via our standard pipeline (preferring the live
+URL, falling back to the snapshot itself if 404).
+
+Usage:
+    python -m src.scrape.wayback_expand --source FoxNews --year 2020 --limit 800
+    python -m src.scrape.wayback_expand --source NBC --year 2019 --limit 500
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import logging
+import random
+import sys
+from pathlib import Path
+from typing import Iterable, Optional
+
+import requests
+from tqdm import tqdm
+
+from src.scrape._http import USER_AGENT, get
+from src.scrape.archive_fallback import fetch_via_wayback
+from src.scrape.parsers import detect_source, parse_article
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("scrape.wayback_expand")
+
+CDX_ENDPOINT = "https://web.archive.org/cdx/search/cdx"
+
+# URL prefix patterns that look like ARTICLES (not section pages, video, etc.).
+# We require enough path depth and an article-like slug.
+ARTICLE_URL_PATTERNS = {
+    "FoxNews": "foxnews.com/*",
+    "NBC": "nbcnews.com/*",
+}
+
+OUT_FIELDS = ["url", "source", "headline", "publish_date", "fetch_status", "bucket_year"]
+
+
+def discover_via_cdx(source: str, year: int, limit: int = 1000, seed: int = 42) -> list[str]:
+    """Query Wayback CDX for snapshots in [year, year+1), return deduped original URLs."""
+    pattern = ARTICLE_URL_PATTERNS[source]
+    params = {
+        "url": pattern,
+        "matchType": "prefix",
+        "from": f"{year}0101",
+        "to": f"{year}1231",
+        "output": "json",
+        "filter": "statuscode:200",
+        "fl": "original",
+        "collapse": "urlkey",
+        "limit": str(limit * 4),  # over-sample for path filtering, dedup
+    }
+    try:
+        resp = requests.get(
+            CDX_ENDPOINT,
+            params=params,
+            headers={"User-Agent": USER_AGENT},
+            timeout=120,
+        )
+    except requests.RequestException as e:
+        logger.error("CDX query failed: %s", e)
+        return []
+    if resp.status_code != 200:
+        logger.error("CDX returned %d", resp.status_code)
+        return []
+    try:
+        rows = resp.json()
+    except ValueError:
+        logger.error("CDX returned non-JSON")
+        return []
+    if len(rows) < 2:
+        return []
+    urls = [r[0] for r in rows[1:]]
+    # Filter to plausible article URLs: hyphenated slug as the last path segment,
+    # not a section/feed/sitemap page.
+    def _looks_like_article(u: str) -> bool:
+        if any(seg in u for seg in ("/sitemap", "/feed", "/rss", "/category/", "/tag/", "/section/")):
+            return False
+        last = u.rstrip("/").rsplit("/", 1)[-1]
+        # Article slugs are hyphenated and >=20 chars; section pages are single words.
+        return "-" in last and len(last) >= 20
+
+    urls = [u for u in urls if _looks_like_article(u)]
+    seen: set[str] = set()
+    deduped = []
+    for u in urls:
+        if u not in seen:
+            seen.add(u)
+            deduped.append(u)
+    rng = random.Random(seed)
+    rng.shuffle(deduped)
+    return deduped[:limit]
+
+
+def _open_out(out_path: Path) -> tuple[csv.DictWriter, "object", set[str]]:
+    seen: set[str] = set()
+    new = not out_path.exists()
+    if not new:
+        try:
+            with out_path.open("r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                seen = {row["url"] for row in reader if row.get("url")}
+        except Exception:
+            seen = set()
+    f = out_path.open("a", newline="", encoding="utf-8")
+    writer = csv.DictWriter(f, fieldnames=OUT_FIELDS)
+    if new:
+        writer.writeheader()
+    return writer, f, seen
+
+
+def scrape_with_wayback_fallback(
+    urls: Iterable[str], year: int, writer: csv.DictWriter, out_fh, seen: set[str]
+) -> None:
+    for url in tqdm(list(urls), desc=f"scrape[{year}]"):
+        if url in seen:
+            continue
+        try:
+            source = detect_source(url)
+        except ValueError:
+            continue
+
+        html = get(url)
+        status = "ok"
+        if html is None:
+            html = fetch_via_wayback(url)
+            status = "wayback" if html else "wayback_fail"
+
+        if html is None:
+            writer.writerow(
+                dict(
+                    url=url,
+                    source=source,
+                    headline=None,
+                    publish_date=None,
+                    fetch_status=status,
+                    bucket_year=year,
+                )
+            )
+            out_fh.flush()
+            continue
+
+        parsed = parse_article(html, url)
+        writer.writerow(
+            dict(
+                url=url,
+                source=source,
+                headline=parsed.headline,
+                publish_date=parsed.publish_date,
+                fetch_status=status,
+                bucket_year=year,
+            )
+        )
+        out_fh.flush()
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
+    p.add_argument("--source", choices=["FoxNews", "NBC"], required=True)
+    p.add_argument("--year", type=int, required=True)
+    p.add_argument("--limit", type=int, default=1000)
+    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--output", type=Path, default=None)
+    args = p.parse_args(argv)
+
+    out_path: Path = args.output or Path(f"data/interim/historical_{args.source}.csv")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Querying Wayback CDX for %s articles in %d (limit=%d)", args.source, args.year, args.limit)
+    urls = discover_via_cdx(args.source, args.year, args.limit, args.seed)
+    logger.info("Discovered %d article URLs", len(urls))
+    if not urls:
+        return 1
+
+    writer, fh, seen = _open_out(out_path)
+    try:
+        scrape_with_wayback_fallback(urls, args.year, writer, fh, seen)
+    finally:
+        fh.close()
+
+    logger.info("Done. Output: %s", out_path)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

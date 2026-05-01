@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.uv/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_meta
+
+# Data — only commit the final processed CSVs
+data/raw/
+data/interim/
+data/starter/*.csv
+# Splits are derived; only the canonical headlines.csv is the source of truth.
+data/processed/splits_random/
+data/processed/splits_temporal/
+# Headlines.csv: gitignored for now. When you have real data, remove this line
+# and `git add -f data/processed/headlines.csv` so the dataset deliverable is committed.
+data/processed/headlines.csv
+*.html.gz
+*.html
+*.warc
+
+# Models
+models/
+*.pt
+*.bin
+*.safetensors
+
+# Reports
+reports/figures/*.tmp
+reports/*.aux
+reports/*.log
+reports/*.out
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Secrets
+.env
