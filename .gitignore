@@ -25,8 +25,8 @@ data/processed/headlines.csv
 *.html
 *.warc
 
-# Models
-models/
+# Models — anchor at repo root only, otherwise it would also ignore src/models/.
+/models/
 *.pt
 *.bin
 *.safetensors
