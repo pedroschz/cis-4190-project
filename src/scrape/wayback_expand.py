@@ -35,49 +35,64 @@ logger = logging.getLogger("scrape.wayback_expand")
 
 CDX_ENDPOINT = "https://web.archive.org/cdx/search/cdx"
 
-# URL prefix patterns that look like ARTICLES (not section pages, video, etc.).
-# We require enough path depth and an article-like slug.
-ARTICLE_URL_PATTERNS = {
-    "FoxNews": "foxnews.com/*",
-    "NBC": "nbcnews.com/*",
+# Hostname per source. We use matchType=domain to capture all subdomains and paths.
+HOSTNAMES = {
+    "FoxNews": "www.foxnews.com",
+    "NBC": "www.nbcnews.com",
 }
 
 OUT_FIELDS = ["url", "source", "headline", "publish_date", "fetch_status", "bucket_year"]
 
 
 def discover_via_cdx(source: str, year: int, limit: int = 1000, seed: int = 42) -> list[str]:
-    """Query Wayback CDX for snapshots in [year, year+1), return deduped original URLs."""
-    pattern = ARTICLE_URL_PATTERNS[source]
+    """Query Wayback CDX for snapshots in [year, year+1), return deduped original URLs.
+
+    Wayback CDX can be slow or 504 under load. We retry a few times before giving up.
+    """
+    host = HOSTNAMES[source]
     params = {
-        "url": pattern,
-        "matchType": "prefix",
+        "url": host,
+        "matchType": "domain",
         "from": f"{year}0101",
         "to": f"{year}1231",
         "output": "json",
         "filter": "statuscode:200",
         "fl": "original",
         "collapse": "urlkey",
-        "limit": str(limit * 4),  # over-sample for path filtering, dedup
+        "limit": str(limit * 4),  # over-sample for path filtering + dedup
     }
-    try:
-        resp = requests.get(
-            CDX_ENDPOINT,
-            params=params,
-            headers={"User-Agent": USER_AGENT},
-            timeout=120,
-        )
-    except requests.RequestException as e:
-        logger.error("CDX query failed: %s", e)
+    rows = None
+    for attempt in range(3):
+        try:
+            resp = requests.get(
+                CDX_ENDPOINT,
+                params=params,
+                headers={"User-Agent": USER_AGENT},
+                timeout=180,
+            )
+        except requests.RequestException as e:
+            logger.warning("CDX network error (try %d/3): %s", attempt + 1, e)
+            continue
+        if resp.status_code == 200:
+            try:
+                rows = resp.json()
+                break
+            except ValueError:
+                logger.warning("CDX returned non-JSON (try %d/3)", attempt + 1)
+                continue
+        if resp.status_code in (429, 502, 503, 504):
+            logger.warning(
+                "CDX returned %d (try %d/3); backing off", resp.status_code, attempt + 1
+            )
+            import time
+
+            time.sleep(15 * (attempt + 1))
+            continue
+        logger.error("CDX returned unexpected %d", resp.status_code)
         return []
-    if resp.status_code != 200:
-        logger.error("CDX returned %d", resp.status_code)
-        return []
-    try:
-        rows = resp.json()
-    except ValueError:
-        logger.error("CDX returned non-JSON")
-        return []
-    if len(rows) < 2:
+
+    if not rows or len(rows) < 2:
+        logger.error("CDX returned no results for %s %d", source, year)
         return []
     urls = [r[0] for r in rows[1:]]
     # Filter to plausible article URLs: hyphenated slug as the last path segment,

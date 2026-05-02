@@ -59,7 +59,10 @@ SITEMAP_INDEX = {
 
 OUT_FIELDS = ["url", "source", "headline", "publish_date", "fetch_status", "bucket_year"]
 
-URL_YEAR_RE = re.compile(r"/(20\d{2})/")
+# Year embedded somewhere in a sub-sitemap URL, e.g. `sitemap-2024-06-article.xml` or `/2020/12/`.
+SITEMAP_YEAR_RE = re.compile(r"(?:[/-])(20\d{2})(?:[/-]|$)")
+# Year inside an article URL — Fox uses `/2020/12/...`, NBC does NOT (rcna IDs have no year).
+ARTICLE_URL_YEAR_RE = re.compile(r"/(20\d{2})/")
 
 
 def _parse_year_range(s: str) -> list[int]:
@@ -97,19 +100,36 @@ def discover_article_urls(source: str, years: list[int]) -> dict[int, list[str]]
 
     by_year: dict[int, list[str]] = {y: [] for y in years}
 
-    for sub in tqdm(sub_locs, desc=f"sitemaps[{source}]"):
-        # Cheap year filter on sub-sitemap URL itself
-        m = URL_YEAR_RE.search(sub)
-        if m and int(m.group(1)) not in years:
+    # Skip non-article sub-sitemaps. NBC has sitemap-{curations,select,video,slideshow,...}
+    # which we don't want; only year-stamped 'article' sub-sitemaps are useful.
+    def _is_article_sitemap(url: str) -> bool:
+        if any(skip in url for skip in ("curation", "select", "video", "slideshow", "image")):
+            return False
+        return SITEMAP_YEAR_RE.search(url) is not None
+
+    candidate_subs = [s for s in sub_locs if _is_article_sitemap(s)]
+    if not candidate_subs:
+        # Fallback: maybe the sitemap URL itself is the urlset (Fox's flat sitemap)
+        candidate_subs = sub_locs
+
+    for sub in tqdm(candidate_subs, desc=f"sitemaps[{source}]"):
+        # Determine the year from the sub-sitemap URL itself.
+        sub_year_match = SITEMAP_YEAR_RE.search(sub)
+        sub_year = int(sub_year_match.group(1)) if sub_year_match else None
+        if sub_year is not None and sub_year not in years:
             continue
+
         sub_xml = get(sub)
         if not sub_xml:
             continue
+
         for art_url in _xml_locs(sub_xml):
-            ym = URL_YEAR_RE.search(art_url)
-            if not ym:
+            # First try to read year from the article URL (Fox-style /YYYY/MM/),
+            # otherwise fall back to the sub-sitemap's year (NBC-style rcna IDs).
+            art_match = ARTICLE_URL_YEAR_RE.search(art_url)
+            y = int(art_match.group(1)) if art_match else sub_year
+            if y is None:
                 continue
-            y = int(ym.group(1))
             if y in by_year:
                 by_year[y].append(art_url)
 
