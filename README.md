@@ -35,20 +35,34 @@ uv run python -m src.report.make_figures
 
 ## Results
 
-| Model | Random val | Random test |
-|---|---:|---:|
-| Course baseline (TF-IDF top-100 + LR) | - | 0.6649 |
-| V0 (replica) | 0.6979 | 0.7112 |
-| V1 (word 1-2gram + balanced LR) | 0.7888 | 0.8529 |
-| V2 (word + char n-grams) | 0.8128 | 0.8583 |
-| V3 (200k features, C=2) | 0.8235 | 0.8663 |
-| DistilBERT-base (3 epochs) | 0.8209 | 0.8396 |
+| Model | Random val | Random test | Hidden val |
+|---|---:|---:|---:|
+| Course baseline (TF-IDF top-100 + LR) | - | 0.6649 | - |
+| V0 (replica) | 0.6979 | 0.7112 | - |
+| V1 (word 1-2gram + balanced LR) | 0.7888 | 0.8529 | - |
+| V2 (word + char n-grams) | 0.8128 | 0.8583 | - |
+| V3 (200k features, C=2) | 0.8235 | 0.8663 | 0.7308 (initial) |
+| DistilBERT-base (3 epochs) | 0.8209 | 0.8396 | 0.4817 |
+| **V2+V3 cat-aware ensemble (final)** | - | - | **0.93** |
 
-V2 trained on full data ≤2022 → temporal test (≥2024): **0.6733** (19pp drop, the headline finding of the exploratory section).
+V3 trained on full data ≤2022 → temporal test (≥2024): **0.6733** (19pp drop, the headline finding of the temporal exploratory section).
+
+The category-aware ensemble (final submission) prepends URL path-category tokens (`news/world`, `politics`, `select/shopping`, ...) to both training (cleaned headline) and inference (URL slug) text. Fox single-level paths (`politics`, `media`, `lifestyle`) and NBC two-level paths (`news/world`, `select/shopping`) carry source-specific vocabulary that headlines can't. See `reports/final_report.tex` §6 for the full diagnostic.
 
 ## Submission
 
-`submission/model.py` and `submission/preprocess.py` go on the leaderboard. `eval_local.py` mirrors the backend evaluator.
+`submission/model.py` (V2+V3 averaged predict_proba, pickled+gzipped+base64) and `submission/preprocess.py` (extracts category prefix + slug) go on the leaderboard. `eval_local.py` mirrors the backend evaluator.
+
+```bash
+# Build the final submission from saved joblibs
+uv run python tools/train_category_enriched.py
+uv run python tools/build_ensemble_submission.py \
+  --joblibs models/classical_v2_cat_all.joblib models/classical_v3_cat_all.joblib
+
+# Sanity check
+uv run python eval_local.py --csv data/processed/splits_random/test.csv
+uv run pytest tests/
+```
 
 ## Repository layout
 

@@ -46,3 +46,9 @@ reports/*.out
 
 # Secrets
 .env
+
+# Claude Code session
+.claude/
+
+# Submission model backups (intermediate iterations)
+submission/model.py.bak*
