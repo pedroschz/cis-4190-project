@@ -12,7 +12,7 @@ def main() -> int:
     p.add_argument(
         "--repo-id",
         required=True,
-        help="Hugging Face repo id, e.g. pedroschz/cis5190-fox-vs-nbc",
+        help="Hugging Face repo id, e.g. Petrvsky/cis5190-fox-vs-nbc",
     )
     p.add_argument(
         "--csv",

@@ -23,7 +23,7 @@ We address Project B: classify a news headline as \textbf{Fox News} or \textbf{N
 \paragraph{Headline numbers.}
 \textbf{(i)} Best classical model V3 (word + char TF-IDF, balanced LR) attains 0.866 random-test accuracy --- a 20\,pp improvement over the course baseline. \textbf{(ii)} A fine-tuned DistilBERT-base reaches 0.840 random-test accuracy. \textbf{(iii)} The same V3 trained only on $\le$2022 data drops to 0.673 on $\ge$2024 data --- a 19\,pp gap that quantifies the temporal-drift penalty the leaderboard test set was likely to exact. \textbf{(iv)} Initial V3 (head-only, 5,225 rows) achieved \textbf{0.7308} on the live leaderboard's hidden \texttt{url\_val}; ablations training on URL-slugs or a head$\cup$slug union \emph{regressed} to 0.71 / 0.50, exposing a URL-artifact overfitting trap. \textbf{(v)} Our final submission, a category-aware V2+V3 ensemble (URL path-category tokens prepended to text), achieves \textbf{0.93 on hidden \texttt{url\_val}} --- a +20\,pp recovery over (iv).
 
-Code: \url{https://github.com/pedroschz/cis-4190-project} \quad Dataset: \url{https://huggingface.co/datasets/pedroschz/cis5190-fox-vs-nbc}
+Code: \url{https://github.com/pedroschz/cis-4190-project} \quad Dataset: \url{https://huggingface.co/datasets/Petrvsky/cis5190-fox-vs-nbc}
 
 \section{Data Collection}
 \paragraph{Sourcing.}
