@@ -1,16 +1,4 @@
-"""HuggingFace Trainer wrapper for headline classification.
-
-Single recipe, parameterized by model name. Designed for Colab-Pro (L4/A100, fp16).
-
-Usage on Colab:
-    !python -m src.models.transformer \
-        --model distilbert-base-uncased \
-        --split random \
-        --epochs 3 --batch-size 32 --lr 2e-5 --max-length 128 \
-        --output-dir /content/drive/MyDrive/cis5190/runs/distilbert_v1
-
-Set --max-samples for smoke tests on CPU.
-"""
+"""Hugging Face Trainer wrapper for headline classification."""
 
 from __future__ import annotations
 

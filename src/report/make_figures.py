@@ -1,11 +1,4 @@
-"""Generate the report figures from the saved results CSVs.
-
-Outputs (all under reports/figures/):
-  - results_bar.png        — accuracy bar chart across all model variants on the random val split
-  - temporal_decay.png     — written by src.eval.temporal.plot_decay
-  - dataset_year_hist.png  — headlines per year per source
-  - headline_length.png    — headline-length distribution per source
-"""
+"""Generate report figures from saved results CSVs."""
 
 from __future__ import annotations
 

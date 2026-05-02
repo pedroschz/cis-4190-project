@@ -1,4 +1,4 @@
-"""Shared metrics + reporting helpers."""
+"""Shared metrics and reporting helpers."""
 
 from __future__ import annotations
 

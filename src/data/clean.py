@@ -1,23 +1,4 @@
-"""Combine all interim scraped CSVs into one clean canonical dataset.
-
-Inputs (any present):
-  data/interim/starter_scraped.csv
-  data/interim/historical_FoxNews.csv
-  data/interim/historical_NBC.csv
-
-Output:
-  data/processed/headlines.csv  (columns: headline, source, publish_date, url, year, source_split)
-
-Cleaning steps, in order:
-  1. Concat all input CSVs.
-  2. Drop rows missing headline OR publish_date.
-  3. Normalize whitespace; strip HTML entities; strip site suffixes once more (defense-in-depth).
-  4. Drop headlines shorter than 10 chars or longer than 300 chars.
-  5. Drop near-duplicates by exact-text match after lowercase + punctuation strip.
-  6. Sanity check: no headline contains "fox news" or "nbc news" as a substring (label leakage).
-  7. Add `year` column from publish_date.
-  8. Add `source_split` column tagging which file the row came from.
-"""
+"""Combine scraped CSVs into a clean canonical dataset."""
 
 from __future__ import annotations
 

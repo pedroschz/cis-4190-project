@@ -1,7 +1,4 @@
-"""Shared HTTP fetcher with polite throttling, retry, and identifying User-Agent.
-
-Used by all scrapers. One global session per host to share connection pool.
-"""
+"""HTTP fetcher with polite throttling and retry."""
 
 from __future__ import annotations
 

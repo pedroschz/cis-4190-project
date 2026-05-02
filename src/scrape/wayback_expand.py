@@ -1,17 +1,4 @@
-"""Historical-article URL discovery via the Wayback Machine CDX API.
-
-Use this when an outlet's live sitemap doesn't index historical content
-(Fox News specifically — its sitemap covers only recent articles).
-
-The CDX API returns every Wayback snapshot for a URL pattern, filtered by date.
-We use it to discover article URLs that existed in a given year, then deduplicate
-to original URLs and scrape them via our standard pipeline (preferring the live
-URL, falling back to the snapshot itself if 404).
-
-Usage:
-    python -m src.scrape.wayback_expand --source FoxNews --year 2020 --limit 800
-    python -m src.scrape.wayback_expand --source NBC --year 2019 --limit 500
-"""
+"""Discover historical article URLs via the Wayback CDX API."""
 
 from __future__ import annotations
 

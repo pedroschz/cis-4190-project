@@ -1,7 +1,7 @@
 [project]
 name = "cis-4190-project"
 version = "0.1.0"
-description = "CIS 4190/5190 Final Project — Track B: News Source Classification (Fox vs NBC)"
+description = "CIS 4190/5190 Final Project - Track B: News Source Classification (Fox vs NBC)"
 requires-python = ">=3.11,<3.13"
 authors = [{ name = "CIS 5190 Team" }]
 readme = "README.md"

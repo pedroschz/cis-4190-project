@@ -1,4 +1,4 @@
-"""Wayback Machine CDX-API fallback for URLs that 404 or rate-limit on the live site."""
+"""Wayback Machine fallback for failed live fetches."""
 
 from __future__ import annotations
 

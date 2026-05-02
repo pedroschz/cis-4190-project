@@ -1,24 +1,4 @@
-"""Expand the dataset by walking each outlet's sitemap index.
-
-Both Fox News and NBC News expose XML sitemap indexes that link to per-month or
-per-year sitemaps of all article URLs they've published. We:
-  1. Fetch each outlet's sitemap index.
-  2. Discover sub-sitemaps and filter by year.
-  3. Sample N URLs per (source, year) bucket.
-  4. Scrape each sampled URL using the same parser pipeline as starter_urls.
-
-Output: data/interim/historical_<source>.csv with the same schema as
-        starter_scraped.csv, plus a `bucket_year` column we filtered against.
-
-Usage:
-    python -m src.scrape.sitemap_expand --source FoxNews --years 2019-2024 --per-year 1000
-    python -m src.scrape.sitemap_expand --source NBC --years 2019-2024 --per-year 1000
-
-Notes on resilience:
-  - Sitemap structure changes; selectors are intentionally permissive.
-  - We rely on the URL itself to assign a bucket year (most outlets put YYYY/MM in path).
-    If we can't infer a year from the URL, we drop the URL from sampling.
-"""
+"""Sample article URLs from per-month sitemaps and scrape them."""
 
 from __future__ import annotations
 
@@ -47,7 +27,7 @@ NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 
 # Per-outlet sitemap entrypoints. Validated 2026-05-01.
 #
-# Fox's sitemap is "fast-changing" — only recent articles. For historical
+# Fox's sitemap is "fast-changing" - only recent articles. For historical
 # (2019-2024) data, prefer src.scrape.wayback_expand which uses Wayback CDX.
 #
 # NBC's sitemap-index lists per-month sub-sitemaps named
@@ -61,7 +41,7 @@ OUT_FIELDS = ["url", "source", "headline", "publish_date", "fetch_status", "buck
 
 # Year embedded somewhere in a sub-sitemap URL, e.g. `sitemap-2024-06-article.xml` or `/2020/12/`.
 SITEMAP_YEAR_RE = re.compile(r"(?:[/-])(20\d{2})(?:[/-]|$)")
-# Year inside an article URL — Fox uses `/2020/12/...`, NBC does NOT (rcna IDs have no year).
+# Year inside an article URL - Fox uses `/2020/12/...`, NBC does NOT (rcna IDs have no year).
 ARTICLE_URL_YEAR_RE = re.compile(r"/(20\d{2})/")
 
 

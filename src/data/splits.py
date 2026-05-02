@@ -1,14 +1,4 @@
-"""Build the random and temporal train/val/test splits.
-
-Random split (for the leaderboard model): stratified 80/10/10 on `source`, seed=42.
-Temporal split (for the exploratory analysis):
-    train: publish_date <= 2022-12-31
-    val:   publish_date in 2023
-    test:  publish_date >= 2024-01-01
-
-Both are written to data/processed/splits_random/ and splits_temporal/ as
-{train,val,test}.csv with the same columns as headlines.csv.
-"""
+"""Build random and temporal train/val/test splits."""
 
 from __future__ import annotations
 

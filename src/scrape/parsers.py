@@ -1,10 +1,4 @@
-"""Per-site headline + publish-date extractors.
-
-The two outlets present headlines and dates differently. We try several extraction
-paths in order of robustness, falling back gracefully. The single most important
-thing we DO NOT keep is the site suffix (e.g. " | Fox News") — that's stripped
-later in src.data.clean, but we already strip the obvious ones here.
-"""
+"""Parse headline + publish date from Fox News / NBC News article HTML."""
 
 from __future__ import annotations
 
@@ -19,17 +13,17 @@ from bs4 import BeautifulSoup
 Source = Literal["FoxNews", "NBC"]
 
 SITE_SUFFIX_PATTERNS = [
-    r"\s*[\|\-—–]\s*Fox\s*News.*$",
-    r"\s*[\|\-—–]\s*NBC\s*News.*$",
-    r"\s*[\|\-—–]\s*NBCNews\.com.*$",
-    r"\s*[\|\-—–]\s*foxnews\.com.*$",
+    r"\s*[\|\-–]\s*Fox\s*News.*$",
+    r"\s*[\|\-–]\s*NBC\s*News.*$",
+    r"\s*[\|\-–]\s*NBCNews\.com.*$",
+    r"\s*[\|\-–]\s*foxnews\.com.*$",
 ]
 
 
 @dataclass
 class ParsedArticle:
     headline: Optional[str]
-    publish_date: Optional[str]  # ISO 8601 string or None
+    publish_date: Optional[str]
     source: Source
     url: str
 
@@ -50,11 +44,9 @@ def _strip_suffix(text: str) -> str:
 
 
 def _parse_date(raw: str) -> Optional[str]:
-    """Best-effort ISO-8601 normalization. Returns YYYY-MM-DD or None."""
     if not raw:
         return None
     raw = raw.strip()
-    # Common formats from JSON-LD / meta tags
     for fmt in (
         "%Y-%m-%dT%H:%M:%S%z",
         "%Y-%m-%dT%H:%M:%SZ",
@@ -66,24 +58,20 @@ def _parse_date(raw: str) -> Optional[str]:
             return datetime.strptime(raw[: len(fmt) + 5], fmt).strftime("%Y-%m-%d")
         except ValueError:
             continue
-    # Fallback: regex YYYY-MM-DD anywhere
     m = re.search(r"(\d{4}-\d{2}-\d{2})", raw)
     return m.group(1) if m else None
 
 
-def _extract_jsonld(soup: BeautifulSoup) -> tuple[Optional[str], Optional[str]]:
-    """Try every <script type=application/ld+json> looking for headline + date."""
+def _extract_jsonld(soup: BeautifulSoup):
     for tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
         try:
             payload = json.loads(tag.string or "{}")
         except (json.JSONDecodeError, TypeError):
             continue
-        # Some sites wrap a list of objects
         candidates = payload if isinstance(payload, list) else [payload]
         for obj in candidates:
             if not isinstance(obj, dict):
                 continue
-            # Sometimes nested under @graph
             inner = obj.get("@graph", [obj])
             if isinstance(inner, dict):
                 inner = [inner]
@@ -92,7 +80,7 @@ def _extract_jsonld(soup: BeautifulSoup) -> tuple[Optional[str], Optional[str]]:
                     continue
                 t = item.get("@type", "")
                 types = t if isinstance(t, list) else [t]
-                if any(kind in types for kind in ("NewsArticle", "Article", "WebPage")):
+                if any(k in types for k in ("NewsArticle", "Article", "WebPage")):
                     headline = item.get("headline") or item.get("name")
                     date = item.get("datePublished") or item.get("dateCreated")
                     if headline:
@@ -100,7 +88,7 @@ def _extract_jsonld(soup: BeautifulSoup) -> tuple[Optional[str], Optional[str]]:
     return None, None
 
 
-def _extract_meta(soup: BeautifulSoup) -> tuple[Optional[str], Optional[str]]:
+def _extract_meta(soup: BeautifulSoup):
     headline = None
     date = None
     og_title = soup.find("meta", property="og:title")
@@ -131,19 +119,6 @@ def _extract_title(soup: BeautifulSoup) -> Optional[str]:
 
 
 def parse_article(html: str, url: str) -> ParsedArticle:
-    """Parse an article HTML page into a ParsedArticle.
-
-    Order of preference for the headline:
-      1. JSON-LD NewsArticle.headline
-      2. <meta property="og:title">
-      3. <h1>
-      4. <title>
-
-    For the date:
-      1. JSON-LD datePublished
-      2. <meta property="article:published_time">
-      3. <time datetime="...">
-    """
     soup = BeautifulSoup(html, "lxml")
     source = detect_source(url)
 

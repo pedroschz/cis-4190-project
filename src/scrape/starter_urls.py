@@ -1,15 +1,4 @@
-"""Scrape the course-provided starter list of URLs into a per-row CSV.
-
-Input:  data/starter/starter_urls.csv  (columns: url, source — source is FoxNews/NBC)
-Output: data/interim/starter_scraped.csv (columns: url, source, headline, publish_date, fetch_status)
-
-Resumable: rows already in the output CSV are skipped on re-run.
-
-Usage:
-    python -m src.scrape.starter_urls --input data/starter/starter_urls.csv \
-                                       --output data/interim/starter_scraped.csv
-    python -m src.scrape.starter_urls --use-wayback   # fall back to archive.org for failures
-"""
+"""Scrape a list of provided URLs into a CSV."""
 
 from __future__ import annotations
 

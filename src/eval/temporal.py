@@ -1,24 +1,4 @@
-"""Temporal robustness experiments — the exploratory component of the project.
-
-Two experiments:
-
-1. **Decay curve**: train each model class on a single year Y of headlines, then
-   evaluate on each year >= Y. Plot accuracy as a function of (test_year - train_year).
-   Compares the classical V2 model (TF-IDF word+char) against a transformer.
-
-2. **Fixed train, sliding test**: train on all data <= 2022, evaluate per-year
-   on 2023 and beyond. This is the "what does the leaderboard test look like?" view.
-
-This module orchestrates the classical experiments directly. For the transformer,
-we shell out to `src.models.transformer` and read back its metrics.json — keeps
-the analysis runnable on CPU even when the transformer training has to happen on
-Colab.
-
-Usage:
-    python -m src.eval.temporal --do-classical
-    python -m src.eval.temporal --do-classical --plot-only   # if results already on disk
-    python -m src.eval.temporal --do-transformer --model distilbert-base-uncased  # Colab only
-"""
+"""Temporal robustness experiments."""
 
 from __future__ import annotations
 

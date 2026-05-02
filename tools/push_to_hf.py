@@ -1,15 +1,4 @@
-"""Push the cleaned headlines dataset to the Hugging Face Hub.
-
-Required by the project spec (must include the HF Dataset link in the report).
-
-Usage (one-time setup on your Mac):
-    uv pip install huggingface_hub datasets
-    huggingface-cli login                       # paste a write-scope token
-    uv run python tools/push_to_hf.py --repo-id <your-username>/cis5190-fox-vs-nbc
-
-The script will create the dataset repo if it doesn't exist (private by default;
-pass --public to make it visible on the leaderboard / report link).
-"""
+"""Upload the cleaned headlines dataset to the Hugging Face Hub."""
 
 from __future__ import annotations
 
@@ -125,7 +114,7 @@ A binary text-classification corpus of {len(df):,} news headlines, scraped from 
 
 ## Splits
 - `random`: stratified 80/10/10 train/val/test on `source` (seed=42).
-- `temporal`: train ≤ 2022, val = 2023, test ≥ 2024 — used for our temporal-robustness analysis.
+- `temporal`: train ≤ 2022, val = 2023, test ≥ 2024 - used for our temporal-robustness analysis.
 
 ## Class balance & date span
 - Sources: ~52.5% FoxNews / ~47.5% NBC.

@@ -1,20 +1,4 @@
-"""Classical TF-IDF + Logistic Regression baselines.
-
-Three variants:
-  - v0: course-baseline replica (TfidfVectorizer(stop_words='english', max_features=100) + LogisticRegression(max_iter=100)).
-        Should land near 66.5% on a stratified split, matching the spec PDF.
-  - v1: word 1-2gram TF-IDF, no max_features cap, class_weight='balanced'.
-  - v2: FeatureUnion of word 1-2gram + char 3-5gram TF-IDF, class_weight='balanced'.
-
-Outputs:
-  - models/classical_<variant>.joblib  (sklearn Pipeline)
-  - reports/figures/results_table.csv  (appended)
-  - prints classification_report to stdout
-
-Usage:
-    python -m src.models.classical --variant v0 --split random
-    python -m src.models.classical --variant v2 --split temporal
-"""
+"""Classical TF-IDF + Logistic Regression baselines."""
 
 from __future__ import annotations
 
