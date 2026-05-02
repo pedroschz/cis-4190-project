@@ -1,0 +1,26 @@
+{
+  "val": {
+    "name": "distilbert-base-uncased_random_val",
+    "accuracy": 0.820855614973262,
+    "f1_macro": 0.8208440875975034,
+    "f1_fox": 0.8222811671087533,
+    "f1_nbc": 0.8194070080862533,
+    "precision_fox": 0.856353591160221,
+    "recall_fox": 0.7908163265306123,
+    "precision_nbc": 0.7875647668393783,
+    "recall_nbc": 0.8539325842696629,
+    "n": 374
+  },
+  "test": {
+    "name": "distilbert-base-uncased_random_test",
+    "accuracy": 0.839572192513369,
+    "f1_macro": 0.8395538395538396,
+    "f1_fox": 0.8378378378378378,
+    "f1_nbc": 0.8412698412698413,
+    "precision_fox": 0.8959537572254336,
+    "recall_fox": 0.7868020304568528,
+    "precision_nbc": 0.7910447761194029,
+    "recall_nbc": 0.8983050847457628,
+    "n": 374
+  }
+}
