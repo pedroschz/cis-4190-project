@@ -129,7 +129,7 @@ Before submitting, we predicted a leaderboard accuracy of 0.82 to 0.86. Our init
 \paragraph{Setup.}
 V3 head-only scores 0.7308 on the hidden \texttt{url\_val}. The obvious fix was to train on URL slugs to match the inference distribution. That made things much worse, dropping to 0.4975 (near chance). A combined head-and-slug training view also regressed, to 0.7142. The leaderboard backend feeds \texttt{preprocess.prepare\_data} a URL-only CSV, so our preprocessor extracts a slug from the URL path at inference. This means the model trains on cleaned headlines but is evaluated on URL-derived slugs. We needed to understand why aligning the training distribution to inference hurt rather than helped.
 
-\paragraph{Ablation.}\mbox{}\\[-0.8em]
+\paragraph{Ablation.}\mbox{}\\[-4em]
 \begin{table}[H]
 \centering\footnotesize
 \setlength{\tabcolsep}{4pt}
@@ -161,5 +161,7 @@ All code, notebooks, and the cleaned dataset are at \url{https://github.com/pedr
 \section{Team Contributions}
 
 Pedro worked on the model design and data collection. Brandon research the first exploratory direction with the temporal drift analysis. Zachary focused on writing the report and researching the URL artifact overfitting. 
+\\ \\\\
+\textbf{Extra Credit Video:} \url{https://www.youtube.com/watch?v=a01JS-eiyPg}
 
 \end{document}
