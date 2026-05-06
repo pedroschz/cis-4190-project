@@ -9,8 +9,9 @@
 \usepackage{amsmath}
 \usepackage{lmodern}
 \usepackage{microtype}
+\usepackage{float}
 
-\title{News Source Classification: Headlines, Models, \\ and Temporal Robustness}
+\title{News Source Classification: Headlines, Models, and Temporal Robustness}
 \author{Pedro Sánchez-Gil Galindo \and Zachary Gin \and Brandon Yan \\[4pt] \normalsize CIS 4190/5190 Applied Machine Learning, Spring 2026 \\ \normalsize Group ID: \texttt{42}}
 \date{May 6, 2026}
 
@@ -18,22 +19,23 @@
 \maketitle
 
 \section{Introduction}
-We address Project B: classify a news headline as \textbf{Fox News} or \textbf{NBC News}. The course-supplied baseline (TF-IDF top-100 + Logistic Regression) reaches 66.49\,\% accuracy. We replicate that baseline as a sanity check, then improve it with richer features and a fine-tuned DistilBERT, comfortably crossing 80\,\% on a held-out random split. The course's hidden leaderboard test set, however, is scraped from URLs after submission and presents an out-of-distribution challenge that motivated two of our exploratory contributions: an \textbf{a-priori temporal-drift analysis} that predicted the magnitude of the leaderboard penalty, and an \textbf{iterative ablation on the real hidden val} that surfaced a non-obvious overfitting mechanism ---  spurious URL artifacts in the training distribution.
+We worked on Project B: classifying news headlines as either Fox News or NBC News. The course-provided baseline uses TF-IDF (top 100 features) with Logistic Regression and achieves 66.49\,\% accuracy. We replicated it as a sanity check, then improved it using richer text features and a fine-tuned DistilBERT, reaching above 80\,\% on a held-out random split.
 
-\paragraph{Headline numbers.}
-\textbf{(i)} Best classical model V3 (word + char TF-IDF, balanced LR) attains 0.866 random-test accuracy --- a 20\,pp improvement over the course baseline. \textbf{(ii)} A fine-tuned DistilBERT-base reaches 0.840 random-test accuracy. \textbf{(iii)} The same V3 trained only on $\le$2022 data drops to 0.673 on $\ge$2024 data --- a 19\,pp gap that quantifies the temporal-drift penalty the leaderboard test set was likely to exact. \textbf{(iv)} Initial V3 (head-only, 5,225 rows) achieved \textbf{0.7308} on the live leaderboard's hidden \texttt{url\_val}; ablations training on URL-slugs or a head$\cup$slug union \emph{regressed} to 0.71 / 0.50, exposing a URL-artifact overfitting trap. \textbf{(v)} Our final submission, a category-aware V2+V3 ensemble (URL path-category tokens prepended to text), achieves \textbf{0.93 on hidden \texttt{url\_val}} --- a +20\,pp recovery over (iv).
+One challenge we did not anticipate upfront is that the leaderboard test set is scraped from URLs \emph{after} submission, creating a distribution shift relative to our training data. This led to two of our exploratory directions: a temporal drift analysis that let us predict roughly how much accuracy we would lose before submitting, and a post-submission ablation on the hidden validation set that revealed a URL artifact overfitting problem.
+
+Our best classical model (V3: word + char TF-IDF, balanced LR) reaches 0.866 on the random test split, a 20 percentage point improvement over the baseline. A fine-tuned DistilBERT reaches 0.840. V3 trained only on pre-2023 data drops to 0.673 on 2024+ data, a gap that matched our pre-submission estimate. Our initial V3 leaderboard submission scored 0.7308 on the hidden \texttt{url\_val}; training on URL slugs instead made things worse (dropping to 0.50), which led us to investigate the root cause. Our final submission, a category-aware V2+V3 ensemble that prepends URL path-category tokens to the input, achieves 0.93 on the hidden \texttt{url\_val}.
 
 Code: \url{https://github.com/pedroschz/cis-4190-project} \quad Dataset: \url{https://huggingface.co/datasets/Petrvsky/cis5190-fox-vs-nbc}
 
 \section{Data Collection}
 \paragraph{Sourcing.}
-We started from the course-provided 3,815 article URLs (2,010 Fox / 1,805 NBC). A polite (1\,req/sec/host) BeautifulSoup pipeline with retries and a Wayback Machine fallback recovered \textbf{3,803 (99.95\,\%) usable rows}. Headline extraction used a JSON-LD $\rightarrow$ \texttt{og:title} $\rightarrow$ \texttt{<h1>} fallback chain; publish dates came from JSON-LD \texttt{datePublished} or \texttt{<meta property="article:published\_time">}.
+We started from the 3,815 article URLs provided by the course (2,010 Fox, 1,805 NBC). We built a scraping pipeline using BeautifulSoup with rate limiting (one request per second per host), retries on failure, and a Wayback Machine fallback. This recovered 3,803 usable rows (99.95\,\%). Headlines were extracted using a fallback chain: JSON-LD, then \texttt{og:title}, then \texttt{<h1>}. Publish dates came from JSON-LD \texttt{datePublished} or the \texttt{article:published\_time} meta tag.
 
 \paragraph{Cleaning.}
-We strip site suffixes (e.g.\ ``\texttt{| Fox News}'') with regex --- the single biggest leakage risk in this task --- normalise Unicode (NFKC) and whitespace, drop headlines outside $[10, 300]$ characters, and deduplicate by lowercased, punctuation-stripped exact match. A second leakage filter removes any remaining headline whose body still contains the literal source name. Initial dataset (starter URLs only): \textbf{3,734 rows}.
+We stripped site suffixes like ``\texttt{| Fox News}'' using regex, since these are an obvious source of label leakage. We also normalized Unicode (NFKC), dropped headlines shorter than 10 or longer than 300 characters, and deduplicated by lowercased exact match with punctuation removed. A second filter removed any headline still containing the literal name of either source. The cleaned starter dataset has 3,734 rows.
 
-\paragraph{Augmentation (post-leaderboard observation).}
-After our first leaderboard submission landed below the random-test prediction (Section~5), we expanded the corpus by sampling \textbf{1,500 fresh 2025--2026 articles} from the Fox News flat sitemap and the NBC News per-month sitemap-index (500 Fox / 1,000 NBC, 100\,\% scrape success). The same cleaning + dedup pipeline yields \textbf{5,225 final rows}, with the year distribution rebalanced to give 2025--2026 30\,\% representation (vs.\ 1.7\,\% in the original starter set). The full year-by-source matrix is in Table~\ref{tab:dataset}.
+\paragraph{Augmentation.}
+After our first leaderboard submission came in below our random-test estimate, we scraped 1,500 additional 2025 and 2026 articles from the Fox News flat sitemap and the NBC News monthly sitemap index (500 Fox, 1,000 NBC). The same cleaning pipeline brought the final dataset to 5,225 rows, with recent articles making up about 30\,\% of the data compared to 1.7\,\% in the original set.
 
 \begin{table}[h]
 \centering\small
@@ -43,12 +45,12 @@ Source & 2019 & 2020 & 2021 & 2022 & 2023 & 2024 & 2025 & 2026 & total \\\midrul
 FoxNews & 0 & 31 & 71 & 188 & 286 & 1{,}375 & 3 & 502 & 2{,}456 \\
 NBC     & 5 & 87 & 137 & 165 & 358 & 968 & 523 & 526 & 2{,}769 \\\bottomrule
 \end{tabular}
-\caption{Final dataset (5,225 rows). Fox's sitemap is fast-rotating and only exposed 2026 articles at scrape time; for 2025 NBC was the only feasible source.}
+\caption{Final dataset (5,225 rows). Fox's sitemap rotates quickly, so only 2026 articles were accessible at scrape time. For 2025, NBC was the only feasible source.}
 \label{tab:dataset}
 \end{table}
 
 \paragraph{Splits.}
-\textit{Random}: stratified 80/10/10 on \texttt{source} (seed 42), used for the leaderboard model. \textit{Temporal}: train $\le$\,2022 (688 rows), val\,=\,2023 (644 rows), test $\ge$\,2024 (2,406 rows), used only for analysis. Overall class balance is 47\,\% Fox / 53\,\% NBC.
+For leaderboard submissions we used a stratified 80/10/10 random split by source (seed 42). For temporal analysis we used a time-based split: train on 2022 and earlier (688 rows), validate on 2023 (644 rows), and test on 2024 and later (2,406 rows). Overall class balance is 47\,\% Fox and 53\,\% NBC.
 
 \begin{figure}[h]
 \centering
@@ -58,32 +60,32 @@ NBC     & 5 & 87 & 137 & 165 & 358 & 968 & 523 & 526 & 2{,}769 \\\bottomrule
 \end{subfigure}\hfill
 \begin{subfigure}{0.48\textwidth}
 \centering\includegraphics[width=\linewidth]{figures/headline_length.png}
-\caption{Headline-length distributions are nearly identical across sources.}
+\caption{Headline length distributions are nearly identical across sources.}
 \end{subfigure}
-\caption{Dataset characteristics. Most data sits in 2024; minimal 2019 / 2025 / 2026 coverage limits the leftmost and rightmost points of the temporal experiments.}
+\caption{Dataset characteristics. Most data is from 2024; limited 2019, 2025, and 2026 coverage constrains the temporal experiments at both ends.}
 \end{figure}
 
 \section{Model Design}
-We trained five variants of increasing capacity, each on the random split:
+We trained five model variants of increasing complexity, each evaluated on the random split:
 \begin{enumerate}\itemsep0pt
-    \item \textbf{V0} --- Course baseline replica: TF-IDF top-100 features + LR (max\_iter=100). Confirms our pipeline reproduces the published 66.49\,\%.
-    \item \textbf{V1} --- Word 1--2-gram TF-IDF (50k features) + balanced LR.
-    \item \textbf{V2} --- FeatureUnion of word 1--2-gram and char\_wb 3--5-gram TF-IDF (50k features each) + balanced LR.
-    \item \textbf{V3} --- V2 with 200k features per branch and \texttt{C=2.0}; sublinear TF.
-    \item \textbf{DistilBERT} --- \texttt{distilbert-base-uncased} fine-tuned for 3 epochs (\texttt{lr=2e-5}, batch 32, max\_len 128, fp16) on Colab L4.
+    \item \textbf{V0:} Course baseline replica: TF-IDF top-100 features + LR (\texttt{max\_iter=100}). Reproduces the published 66.49\,\%.
+    \item \textbf{V1:} Word 1-2-gram TF-IDF (50k features) + balanced LR.
+    \item \textbf{V2:} FeatureUnion of word 1-2-gram and char\_wb 3-5-gram TF-IDF (50k features each) + balanced LR.
+    \item \textbf{V3:} V2 with 200k features per branch, \texttt{C=2.0}, and sublinear TF weighting.
+    \item \textbf{DistilBERT:} \texttt{distilbert-base-uncased} fine-tuned for 3 epochs (\texttt{lr=2e-5}, batch 32, max\_len 128, fp16) on Colab L4.
 \end{enumerate}
 
-\paragraph{Iteration story.}
-Each step added a single design lever. V0\,$\rightarrow$\,V1: lift the 100-feature cap and balance class weights, gaining 14\,pp. V1\,$\rightarrow$\,V2: add character n-grams to capture stylometric cues (ALL-CAPS abbreviations, punctuation patterns, contractions). V2\,$\rightarrow$\,V3: scale features 4$\times$ and tune \texttt{C}. DistilBERT was added as a strong-prior contrast point.
+\paragraph{Iteration.}
+Each version added one change. V0 to V1: removed the 100-feature cap and added class balancing, gaining 14 percentage points. V1 to V2: added character n-grams to capture stylistic patterns like ALL-CAPS abbreviations and punctuation habits. V2 to V3: scaled features 4x and tuned \texttt{C}. DistilBERT was added as a strong-prior comparison.
 
 \paragraph{Final leaderboard model.}
-A \textbf{category-aware V2+V3 ensemble} (averaged \texttt{predict\_proba}), each component trained head-only on the full 5,225 rows. Both training and inference inputs are enriched with URL path-category tokens (\texttt{news/world}, \texttt{politics}, \texttt{lifestyle}, \texttt{select/shopping}, etc.) prepended to the cleaned headline (or URL slug at inference). Sections 6 and 7 explain how this single change closed a 9-point gap by giving the model access to a strong source-stylized signal that pure headline text cannot carry. The pipeline list is exported in \texttt{submission/model.py} as a base64-gzipped pickle.
+Our final submission is a category-aware V2+V3 ensemble (averaged \texttt{predict\_proba}), trained on all 5,225 rows. Both training and inference inputs prepend URL path-category tokens (\texttt{news/world}, \texttt{politics}, \texttt{lifestyle}, \texttt{select/shopping}) to the cleaned headline or URL slug. Sections 5 and 6 explain how this single change recovered 20 percentage points on the leaderboard by giving the model access to structural signals that headline text alone does not carry. The pipeline is exported in \texttt{submission/model.py} as a base64-gzipped pickle.
 
-\paragraph{Where this sits relative to published work.}
-Fine-tuned transformer models on comparable 2-class headline corpora (5--20k row scale) generally report 0.86--0.92 accuracy on random splits. Our V3 random-test accuracy of 0.866 is in that band, suggesting classifier capacity is not the limiting factor here --- the train/inference distribution mismatch dissected in Section~6 is.
+\paragraph{Comparison to prior work.}
+Fine-tuned transformers on similar 2-class headline datasets (5 to 20k rows) typically report 0.86 to 0.92 accuracy on random splits. Our V3 result of 0.866 falls in that range, which suggests classifier capacity was not our main bottleneck. The train-to-inference distribution mismatch described in Section 6 was.
 
 \section{Evaluation}
-We compute accuracy and macro-F1 on the random val/test splits, plus per-class precision/recall to verify neither class is being ignored. Hyperparameter selection ($C \in \{0.5, 1, 2, 4, 8\}$ for V3) used random val accuracy.
+We evaluated models using accuracy and macro-F1 on the random val and test splits, and also tracked per-class precision and recall to check for class imbalance issues. Hyperparameter tuning for V3 tested $C \in \{0.5, 1, 2, 4, 8\}$ using random val accuracy.
 
 \begin{table}[h]
 \centering\small
@@ -92,70 +94,72 @@ We compute accuracy and macro-F1 on the random val/test splits, plus per-class p
 Model & Val acc & Test acc & Test F1$_{\text{macro}}$ & Notes \\\midrule
 Course baseline (PDF) & --- & 0.6649 & --- & top-100 features, target floor \\
 V0 (our replica) & 0.6979 & 0.7112 & 0.709 & confirms pipeline \\
-V1 (word 1--2g + bal-LR) & 0.7888 & 0.8529 & 0.853 & class weights + lift max\_features \\
+V1 (word 1-2g + bal-LR) & 0.7888 & 0.8529 & 0.853 & class weights + more features \\
 V2 (word + char) & 0.8128 & 0.8583 & 0.858 & char n-grams help \\
 V3 (200k features, $C{=}2$) & \textbf{0.8235} & \textbf{0.8663} & \textbf{0.866} & best classical \\
-DistilBERT (3 ep, lr 2e-5) & 0.8209 & 0.8396 & 0.840 & competitive but no decisive lift \\
+DistilBERT (3 ep, lr 2e-5) & 0.8209 & 0.8396 & 0.840 & competitive but no clear win \\
 \bottomrule
 \end{tabular}
-\caption{Random-split results. The DistilBERT--V3 gap is within the $\pm$2.5\,pp standard error of a 374-sample test set, so we cannot claim either model decisively wins.}
+\caption{Random-split results. The DistilBERT-V3 gap is within the $\pm$2.5\,pp standard error on the 374-sample test set, so neither model clearly dominates.}
 \end{table}
-
 
 \section{Exploratory I: Temporal Robustness}
 \paragraph{Question.}
-The course's hidden test set is scraped \emph{after} we submit. How much accuracy will we lose to that gap?
+The leaderboard test set is scraped after submission, so there is always a time gap between our training data and the test distribution. We wanted to estimate how much accuracy we would lose from this before we submitted.
 
 \paragraph{Experimental design.}
-Two complementary experiments on the temporal split (train $\le$\,2022 / val 2023 / test $\ge$\,2024):
+We ran two experiments using the temporal split (train on 2022 and earlier, val on 2023, test on 2024 and later):
 \begin{itemize}\itemsep0pt
-    \item \textbf{Decay curve.} For each train year $Y \in \{2020, 2021, 2022\}$ (years $\ge$\,50 rows after class balance), train V3 (and DistilBERT) on data from year $Y$ alone, then evaluate on each year $Y'$. Plot accuracy as a function of the gap $Y' - Y$.
-    \item \textbf{Fixed-train, sliding test.} Train V3 once on all data $\le$\,2022 (688 rows), then evaluate per year on 2023 (val) and 2024+ (test).
+    \item Decay curve: for each training year $Y \in \{2020, 2021, 2022\}$ (years with at least 50 rows per class), we trained V3 and DistilBERT on data from that year and evaluated on each subsequent year $Y'$, plotting accuracy against the gap $Y' - Y$.
+    \item Fixed train, sliding test: we trained V3 once on all pre-2023 data (688 rows) and evaluated per-year on 2023 through 2024+.
 \end{itemize}
 
 \begin{figure}[h]
 \centering\includegraphics[width=0.55\linewidth]{figures/temporal_decay.png}
-\caption{Accuracy vs.\ temporal gap. V2 degrades smoothly from $\approx$\,0.99 (gap=0) to $\approx$\,0.52 (gap=4); DistilBERT's curve is depressed throughout because in single-year slices ($\le$\,200 rows) it collapses to majority-class prediction.}
+\caption{Accuracy vs.\ temporal gap. V3 drops from roughly 0.99 at gap=0 to roughly 0.52 at gap=4. DistilBERT performs worse throughout because single-year slices have under 200 rows and the model defaults to majority-class prediction.}
 \end{figure}
 
 \paragraph{Findings.}
-V3's accuracy on $\ge$\,2024 articles drops from 0.866 (random test) to \textbf{0.673} (temporal test) --- a \textbf{19\,pp gap}. Decay is monotonic in the year-gap: gap=1 averages 0.72, gap=2 averages 0.63, gap=4 reaches 0.52 (chance 0.50). Error analysis on misclassified $\ge$\,2024 examples concentrates losses on entity-driven topical headlines (``Trump'', ``Biden'', ``Israel'', ``Hamas'' --- entities whose frequency turns over year-by-year), while stylistic character-n-gram cues (ALL-CAPS abbreviations, Fox-style colon introductions) prove more stable. DistilBERT trained on single-year slices ($\le$350 rows) collapses to majority-class prediction --- a small-data failure mode the classical model dodges via \texttt{class\_weight='balanced'}.
+V3's accuracy on 2024+ articles drops from 0.866 (random test) to 0.673 (temporal test), a 19 percentage point gap. The drop is consistent across year gaps: gap=1 averages 0.72, gap=2 averages 0.63, gap=4 reaches 0.52. Looking at misclassified examples, most errors involve entity-heavy headlines with names like ``Trump,'' ``Biden,'' ``Israel,'' and ``Hamas,'' which shift in frequency year over year. Stylistic cues like ALL-CAPS abbreviations and Fox-style colon introductions hold up better over time. DistilBERT collapses to majority-class prediction on single-year slices due to insufficient training data, a failure mode that the classical model avoids with \texttt{class\_weight='balanced'}.
 
-\paragraph{Implications for the leaderboard.}
-Pre-submission we predicted 0.82--0.86. Initial V3 head-only landed at 0.7308; Section~6's diagnostic explains the further drop and presents the URL-category fix that recovered to 0.93.
+\paragraph{Leaderboard implication.}
+Before submitting, we predicted a leaderboard accuracy of 0.82 to 0.86. Our initial V3 submission landed at 0.7308. Section 6 explains the additional drop and how the URL-category fix brought it back to 0.93.
 
-\section{Exploratory II: URL-Artifact Overfitting on the Hidden Leaderboard}
-\paragraph{The result, and the surprise.}
-V3 head-only achieves \textbf{0.7308} on hidden \texttt{url\_val}. The naive intervention --- train on URL slugs to match the inference distribution --- \emph{regresses} to \textbf{0.4975} (chance). Adding slugs as a second training view (head$\cup$slug) regresses to 0.7142. The leaderboard backend feeds \texttt{preprocess.prepare\_data} a URL-only CSV; our preprocessor extracts a slug from the URL path (segment with most dashes, query/fragment/CMS-artifacts stripped). The model is therefore trained on cleaned headlines but evaluated on URL-derived slugs. The diagnostic below shows why making train and inference match makes things \emph{worse}.
+\section{Exploratory II: URL Artifact Overfitting}
+\paragraph{Setup.}
+V3 head-only scores 0.7308 on the hidden \texttt{url\_val}. The obvious fix was to train on URL slugs to match the inference distribution. That made things much worse, dropping to 0.4975 (near chance). A combined head-and-slug training view also regressed, to 0.7142. The leaderboard backend feeds \texttt{preprocess.prepare\_data} a URL-only CSV, so our preprocessor extracts a slug from the URL path at inference. This means the model trains on cleaned headlines but is evaluated on URL-derived slugs. We needed to understand why aligning the training distribution to inference hurt rather than helped.
 
-\paragraph{Ablation on the live hidden \texttt{url\_val}.}
-\begin{table}[h]
+\paragraph{Ablation.}\mbox{}\\[-0.8em]
+\begin{table}[H]
 \centering\footnotesize
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{lcccr}
 \toprule
 Variant & Training input & Train rows & Hidden val & $\Delta$ vs.\ V3-head \\\midrule
-V3 (head-only)   & cleaned headlines    & 3{,}734  & 0.7308 & --- \\
-V3 (head$\cup$slug)& headlines + slugs   & 5{,}225 ($\times 2$) & 0.7142 & --1.7\,pp \\
-V3 (slug-only, $C{=}4$)  & URL slugs    & 5{,}225  & 0.4975 & --23.3\,pp \\
-DistilBERT (head-only) & cleaned headlines & 2{,}987 & 0.4817 & --24.9\,pp \\\midrule
-\textbf{V2+V3 cat-aware (final)} & \textbf{cat + headline} & \textbf{5{,}225} & \textbf{0.93} & \textbf{+20\,pp} \\
+V3 (head-only)              & cleaned headlines    & 3{,}734            & 0.7308 & baseline \\
+V3 (head+slug)              & headlines + slugs    & 5{,}225 ($\times 2$) & 0.7142 & -1.7\,pp \\
+V3 (slug-only, $C{=}4$)     & URL slugs            & 5{,}225            & 0.4975 & -23.3\,pp \\
+DistilBERT (head-only)      & cleaned headlines    & 2{,}987            & 0.4817 & -24.9\,pp \\\midrule
+\textbf{V2+V3 cat-aware (final)} & cat + headline  & 5{,}225            & \textbf{0.93} & \textbf{+20\,pp} \\
 \bottomrule
 \end{tabular}
-\caption{Hidden-val accuracy by training-input choice. The first four rows show that matching the inference distribution by training on slugs collapses performance. The final row shows the recovery: enriching both training and inference text with URL path-category tokens lifts the V2+V3 backbone by 20\,pp.}
+\caption{Hidden-val accuracy by training-input choice. Training on slugs collapses performance. Prepending URL path-category tokens to both training and inference inputs recovers 20\,pp.}
 \label{tab:ablation}
 \end{table}
 
-\paragraph{Diagnostic.}
-Two artifacts in \emph{our} scraped URL distribution explain the collapse: $87.9\,\%$ of NBC URLs contain the CMS substring \texttt{rcna}\textit{<digits>} ($0\,\%$ of Fox); $17.5\,\%$ of Fox URLs end in \texttt{.print} ($0\,\%$ of NBC). The slug-only V3 latched onto these as near-perfect class markers --- inspecting fitted LR coefficients, ``\texttt{print}'' is the highest-positive Fox token ($+5.23$); the \texttt{rcna} subword family dominates the NBC tail. The leaderboard's hidden \texttt{url\_val} is presumably scraped through canonical URLs and contains few or none of these markers, so the model's strongest features fire incorrectly at inference. We verified the mechanism on a held-out 2025--2026 slice of our own data: DistilBERT's accuracy on NBC URLs \emph{with} \texttt{rcna} is $0.541$ ($n{=}1{,}012$), but on NBC URLs \emph{without} \texttt{rcna} it is $1.000$ ($n{=}37$). The artifact is doing the opposite of what its training-set co-occurrence suggests --- its subword tokens (\texttt{rc}, \texttt{\#\#na}, \texttt{\#\#12}\ldots) drown out the topical signal at inference time.
+\paragraph{Diagnosis.}
+Two URL artifacts explain the collapse. 87.9\,\% of NBC URLs contain the CMS substring \texttt{rcna}\textit{<digits>} (0\,\% of Fox), and 17.5\,\% of Fox URLs end in \texttt{.print} (0\,\% of NBC). The slug-only V3 latched onto these as near-perfect class markers: ``\texttt{print}'' is the highest-weighted Fox token ($+5.23$) in the fitted LR coefficients, and the \texttt{rcna} subword family dominates the NBC side. The hidden \texttt{url\_val} is presumably scraped through canonical URLs with few or none of these artifacts, so the model's strongest features point the wrong direction at inference. We verified this on a held-out 2025-2026 slice: DistilBERT accuracy on NBC URLs \emph{with} \texttt{rcna} is 0.541 ($n{=}1{,}012$), but on NBC URLs \emph{without} \texttt{rcna} it is 1.000 ($n{=}37$). The artifact actively hurts at inference because its subword tokens drown out the topical signal.
 
-\paragraph{Why head-only generalises, and the takeaway.}
-Cleaned headline text never contained the URL artifacts; V3 head-only's vocabulary is purely topical (entity nouns, function words, character n-grams of normal English). When fed slug-format inputs at inference, topical features still fire (e.g. ``\texttt{trump}'', ``\texttt{biden}'', ``\texttt{israel}''), and the artifacts contribute zero because they have zero weight. Head-only training is robust precisely \emph{because} of the train/inference distribution mismatch --- a counter-intuitive result. Matching train and inference distributions is good advice when both come from the same generating process; when inference is an \emph{independent} scrape, training on a feature-poor but artifact-free text (the cleaned headline) beats training on the full-fidelity slug.
+\paragraph{Why head-only works, and the fix.}
+Cleaned headline text never contained URL artifacts, so V3 head-only builds a vocabulary of topical words and character n-grams. When evaluated on slug-format inputs at inference, topical features like ``\texttt{trump}'' and ``\texttt{israel}'' still fire correctly and the artifacts have zero weight since they were never seen in training. In this case the train-to-inference distribution gap is actually helpful because training on cleaner text produced a more generalizable model.
 
-\paragraph{Final-mile lift: URL-category enrichment.}
-The §6 ablation said matching train$\to$slug at the inference distribution hurts. The opposite move --- expand the inference text with URL-side context that a clean headline doesn't carry --- helps enormously. Fox URLs use single-level paths (\texttt{politics}, \texttt{media}, \texttt{lifestyle}) while NBC uses two-level paths (\texttt{news/world}, \texttt{news/us-news}, \texttt{select/shopping}, \texttt{politics/donald-trump}). The vocabulary and depth differ \emph{per source} in ways an artifact-stripped slug erases. Prepending these path tokens to both training (cleaned headline) and inference (URL slug) text brings V3 honest held-out from 0.832 to \textbf{0.928} ($+9.6$\,pp); V2 mirrors at 0.920. The category-aware V2+V3 ensemble (averaged \texttt{predict\_proba}) is our final leaderboard submission and reaches \textbf{0.93 on hidden \texttt{url\_val}} (Table~\ref{tab:ablation}, last row), matching the honest held-out estimate to within rounding and confirming that the lift is structural rather than test-set-specific.
+Rather than try to close this gap by training on slugs, we went in the other direction: add URL-side context that carries real signal without the artifacts. Fox URLs use single-level paths like \texttt{politics} and \texttt{lifestyle}, while NBC uses two-level paths like \texttt{news/world} and \texttt{select/shopping}. Prepending these path-category tokens to both training and inference inputs brought V3 from 0.832 to 0.928 ($+9.6$\,pp) on our held-out set, and V2 showed a similar improvement at 0.920. The category-aware V2+V3 ensemble is our final leaderboard submission and achieves 0.93 on hidden \texttt{url\_val} (Table~\ref{tab:ablation}), matching our held-out estimate and confirming that the gain is structural and not specific to the leaderboard test set.
 
 \section{Reproducibility}
-All code, notebooks, and the cleaned dataset live at \url{https://github.com/pedroschz/cis-4190-project}. Training is seeded (42); the cleaned headlines and both splits are committed to the repo. \texttt{eval\_local.py} mirrors the backend evaluator. \texttt{tests/test\_pipeline.py} covers cleaning, splitting, and classical training (7/7 passing).
+All code, notebooks, and the cleaned dataset are at \url{https://github.com/pedroschz/cis-4190-project}. Training uses seed 42; the cleaned headlines and splits are committed to the repo. \texttt{eval\_local.py} mirrors the backend evaluator, and \texttt{tests/test\_pipeline.py} covers cleaning, splitting, and classical training (7/7 passing).\sloppy
+
+\section{Team Contributions}
+
+Pedro worked on the model design and data collection. Brandon research the first exploratory direction with the temporal drift analysis. Zachary focused on writing the report and researching the URL artifact overfitting. 
 
 \end{document}
